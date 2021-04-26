@@ -39,90 +39,131 @@ size_t iamax(
     T const *x, int_t incx )
 {
     typedef real_type<T> real_t;
-
-    bool noinfyet = true;  // no Inf has been found yet
-    bool scaledsmax = false; // indicates whether sx(i) finite but abs(real(sx(i))) + abs(imag(sx(i))) = Inf
-    real_t smax = -1;
-    size_t index = INVALID_INDEX;
-    const real_t oneFourth = 0.25;
+    
+    bool waitForNaNcheck = true;
 
     if (incx == 1) {
         // unit stride
-        for (size_t i = 0; i < n; ++i) {
-            if ( isnan(x[i]) ) {
-                // return when first NaN found
-                return i;
+        #pragma omp parallel sections num_threads(2) shared(waitForNaNcheck)
+        {
+            #pragma omp section
+            { // Check for nans
+                for (size_t i = 0; i < n; ++i) {
+                    if ( isnan(x[i]) ) {
+                        // return when first NaN found
+                        return i;
+                    }
+                }
+                waitForNaNcheck = false;
             }
-            else if ( noinfyet ) {
-                if ( isinf(x[i]) ) {
-                    // record location of first Inf, keep looking for first NaN
-                    index = i;
-                    noinfyet = false;
-                }
-                else { // still no Inf found yet
-                    if ( !scaledsmax ) { // no abs(real(sx(i))) + abs(imag(sx(i))) = Inf  yet
-                        real_t a = abs1(x[i]);
-                        if ( isinf(a) ) {
-                            scaledsmax = true;
-                            smax = abs1( oneFourth*x[i] );
-                            index = i;
+            #pragma omp section
+            { // Regular section + check for infs
+
+                bool scaledsmax = false; // indicates whether sx(i) finite but abs(real(sx(i))) + abs(imag(sx(i))) = Inf
+                real_t smax = -1;
+                size_t index = INVALID_INDEX;
+                const real_t oneFourth = 0.25;
+
+                for (size_t i = 0; i < n; ++i) {
+                    if ( isinf(x[i]) ) {
+                        // record location of first Inf
+                        index = i;
+                        break;
+                    }
+                    else { // still no Inf found yet
+                        if ( !scaledsmax ) { // no abs(real(sx(i))) + abs(imag(sx(i))) = Inf  yet
+                            real_t a = abs1(x[i]);
+                            if ( isinf(a) ) {
+                                scaledsmax = true;
+                                smax = abs1( oneFourth*x[i] );
+                                index = i;
+                            }
+                            else if ( a > smax ) { // and everything finite so far
+                                smax = a;
+                                index = i;
+                            }
                         }
-                        else if ( a > smax ) { // and everything finite so far
-                            smax = a;
-                            index = i;
+                        else { // scaledsmax = true
+                            real_t a = abs1( oneFourth*x[i] );
+                            if ( a > smax ) { // and everything finite so far
+                                smax = a;
+                                index = i;
+                            }
                         }
                     }
-                    else { // scaledsmax = true
-                        real_t a = abs1( oneFourth*x[i] );
-                        if ( a > smax ) { // and everything finite so far
-                            smax = a;
-                            index = i;
-                        }
-                    }
                 }
+                
+                while ( waitForNaNcheck ) {
+                    // It should never be stuck here, since check for nans is faster than the regular iamax section
+                    #pragma omp flush(waitForNaNcheck)
+                }
+                return index;
             }
         }
     }
     else {
         // non-unit stride
-        int_t ix = 0;
-        for (size_t i = 0; i < n; ++i) {
-            if ( isnan(x[ix]) ) {
-                // return when first NaN found
-                return i;
-            }
-            else if ( noinfyet ) {
-                if ( isinf(x[ix]) ) {
-                    // record location of first Inf, keep looking for first NaN
-                    index = i;
-                    noinfyet = false;
+        #pragma omp parallel sections num_threads(2) shared(waitForNaNcheck)
+        {
+            #pragma omp section
+            { // Check for nans
+                int_t ix = 0;
+                for (size_t i = 0; i < n; ++i) {
+                    if ( isnan(x[ix]) ) {
+                        // return when first NaN found
+                        return i;
+                    }
+                    ix += incx;
                 }
-                else { // still no Inf found yet
-                    if ( !scaledsmax ) { // no abs(real(sx(i))) + abs(imag(sx(i))) = Inf  yet
-                        real_t a = abs1(x[ix]);
-                        if ( isinf(a) ) {
-                            scaledsmax = true;
-                            smax = abs1( oneFourth*x[ix] );
-                            index = i;
+                waitForNaNcheck = false;
+            }
+            #pragma omp section
+            { // Regular section + check for infs
+
+                bool scaledsmax = false; // indicates whether sx(i) finite but abs(real(sx(i))) + abs(imag(sx(i))) = Inf
+                real_t smax = -1;
+                size_t index = INVALID_INDEX;
+                const real_t oneFourth = 0.25;
+
+                int_t ix = 0;
+                for (size_t i = 0; i < n; ++i) {
+                    if ( isinf(x[ix]) ) {
+                        // record location of first Inf
+                        index = i;
+                        break;
+                    }
+                    else { // still no Inf found yet
+                        if ( !scaledsmax ) { // no abs(real(sx(i))) + abs(imag(sx(i))) = Inf  yet
+                            real_t a = abs1(x[ix]);
+                            if ( isinf(a) ) {
+                                scaledsmax = true;
+                                smax = abs1( oneFourth*x[ix] );
+                                index = i;
+                            }
+                            else if ( a > smax ) { // and everything finite so far
+                                smax = a;
+                                index = i;
+                            }
                         }
-                        else if ( a > smax ) { // and everything finite so far
-                            smax = a;
-                            index = i;
+                        else { // scaledsmax = true
+                            real_t a = abs1( oneFourth*x[ix] );
+                            if ( a > smax ) { // and everything finite so far
+                                smax = a;
+                                index = i;
+                            }
                         }
                     }
-                    else { // scaledsmax = true
-                        real_t a = abs1( oneFourth*x[ix] );
-                        if ( a > smax ) { // and everything finite so far
-                            smax = a;
-                            index = i;
-                        }
-                    }
+                    ix += incx;
                 }
+
+                while ( waitForNaNcheck ) {
+                    // It should never be stuck here, since check for nans is faster than the regular iamax section
+                    #pragma omp flush(waitForNaNcheck)
+                }
+                return index;
             }
-            ix += incx;
         }
     }
-    return index;
 }
 
 }  // namespace blas
