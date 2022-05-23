@@ -1,4 +1,3 @@
-
 // Copyright (c) 2021-2022, University of Colorado Denver. All rights reserved.
 //
 // This file is part of <T>LAPACK.
