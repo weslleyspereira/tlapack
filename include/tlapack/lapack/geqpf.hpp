@@ -170,7 +170,7 @@ int geqpf(matrix_t& A,
                 real_t temp, temp2;
                 const real_t rone(1);
 
-                temp = std::abs(A(i, j)) / vector_of_norms[j];
+                temp = tlapack::abs(A(i, j)) / vector_of_norms[j];
                 temp = max(rzero, (rone + temp) * (rone - temp));
                 temp2 = vector_of_norms[j] / vector_of_norms[n + j];
                 temp2 = temp * (temp2 * temp2);
@@ -180,12 +180,12 @@ int geqpf(matrix_t& A,
                         vector_of_norms[n + j] = vector_of_norms[j];
                     }
                     else {
-                        vector_of_norms[j] = 0;
-                        vector_of_norms[n + j] = 0;
+                        vector_of_norms[j] = rzero;
+                        vector_of_norms[n + j] = rzero;
                     }
                 }
                 else {
-                    vector_of_norms[j] = vector_of_norms[j] * std::sqrt(temp);
+                    vector_of_norms[j] = vector_of_norms[j] * sqrt(temp);
                 }
             }
         }
